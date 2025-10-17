@@ -19,7 +19,7 @@ on:
       param:
         description: 'parameter'
         required: false
-        default: ''
+        default: 'sl_3000-emmc'
 
 env:
   TOKEN_KIDDIN9: ${{ secrets.TOKEN_KIDDIN9 }}
