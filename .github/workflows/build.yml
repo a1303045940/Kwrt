@@ -1,0 +1,190 @@
+name: Build OpenWrt SL3000
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'OpenWrt target (例如 mediatek_filogic)'
+        required: true
+        default: 'mediatek_filogic'
+
+permissions:
+  contents: write
+
+env:
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Build ${{ inputs.target }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Init build environment
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo -E apt-get -qq update
+        sudo -E apt-get -qq install build-essential clang flex bison g++ gawk \
+          gcc-multilib g++-multilib gettext git libncurses5-dev libssl-dev \
+          python3-setuptools rsync swig unzip zlib1g-dev file wget \
+          llvm python3-pyelftools libpython3-dev aria2 jq qemu-utils ccache rename \
+          libelf-dev device-tree-compiler libgmp3-dev libmpc-dev libfuse-dev
+        sudo -E apt-get -qq autoremove --purge
+        sudo -E apt-get -qq clean
+        sudo timedatectl set-timezone "$TZ"
+        git config --global user.email "actions@github.com"
+        git config --global user.name "GitHub Actions"
+
+    - name: Load devices settings
+      run: |
+        TARGET="${{ inputs.target }}"
+        echo "TARGET=$TARGET" >> $GITHUB_ENV
+
+        # 加载公共 settings.ini
+        source "${GITHUB_WORKSPACE}/devices/common/settings.ini"
+
+        # 如果有目标专用 settings.ini 就覆盖部分变量
+        if [ -f "${GITHUB_WORKSPACE}/devices/$TARGET/settings.ini" ]; then
+          source "${GITHUB_WORKSPACE}/devices/$TARGET/settings.ini"
+        fi
+
+        echo "REPO_URL=${REPO_URL}"       >> $GITHUB_ENV
+        echo "REPO_BRANCH=${REPO_BRANCH}" >> $GITHUB_ENV
+        echo "CONFIG_FILE=${CONFIG_FILE}" >> $GITHUB_ENV
+        echo "DIY_SH=${DIY_SH}"           >> $GITHUB_ENV
+        echo "BUILD_DATE=$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_ENV
+
+    - name: Clone source code
+      run: |
+        if [ -n "${REPO_BRANCH}" ]; then
+          echo "Clone $REPO_URL branch $REPO_BRANCH"
+          git clone --depth 1 "$REPO_URL" -b "$REPO_BRANCH" openwrt
+        else
+          echo "Clone $REPO_URL default branch"
+          git clone --depth 1 "$REPO_URL" openwrt
+        fi
+
+    - name: Copy device files and DIY tree
+      run: |
+        cd openwrt
+
+        # 通用文件
+        if [ -d "${GITHUB_WORKSPACE}/devices/common" ]; then
+          cp -rf ${GITHUB_WORKSPACE}/devices/common/* ./
+        fi
+
+        # 目标专用文件 (包含 patches、默认 config 等)
+        if [ -d "${GITHUB_WORKSPACE}/devices/${{ inputs.target }}" ]; then
+          cp -rf ${GITHUB_WORKSPACE}/devices/${{ inputs.target }}/* ./
+        fi
+
+        # 如果你把 DTS 等放在 devices/mediatek_filogic/diy/ 下面，这里会覆盖到源码目录
+        if [ -d "${GITHUB_WORKSPACE}/devices/${{ inputs.target }}/diy" ]; then
+          cp -rf ${GITHUB_WORKSPACE}/devices/${{ inputs.target }}/diy/* ./
+        fi
+
+        # 给 DIY 脚本加执行权限
+        if [ -n "${DIY_SH}" ] && [ -f "${DIY_SH}" ]; then
+          chmod +x "${DIY_SH}"
+          echo "Run DIY script: ${DIY_SH}"
+          /bin/bash "${DIY_SH}"
+        fi
+
+    - name: Apply patches
+      run: |
+        cd openwrt
+        # 期望 devices/mediatek_filogic/patches/34-sl-3000.patch 已经被复制到 ./patches/
+        if [ -d "patches" ]; then
+          find patches -type f -name '*.patch' | sort | while read p; do
+            echo "Applying patch: $p"
+            patch -p1 < "$p"
+          done
+        else
+          echo "No patches directory, skip."
+        fi
+
+    - name: Update and install feeds
+      run: |
+        cd openwrt
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    - name: Generate .config
+      run: |
+        cd openwrt
+
+        # 优先使用 devices/${target}/${CONFIG_FILE}
+        if [ -n "${CONFIG_FILE}" ] && [ -f "${GITHUB_WORKSPACE}/devices/${{ inputs.target }}/${CONFIG_FILE}" ]; then
+          echo "Use config from devices/${{ inputs.target }}/${CONFIG_FILE}"
+          cp "${GITHUB_WORKSPACE}/devices/${{ inputs.target }}/${CONFIG_FILE}" .config
+        elif [ -n "${CONFIG_FILE}" ] && [ -f "${CONFIG_FILE}" ]; then
+          echo "Use config from ${CONFIG_FILE} in openwrt root"
+          cp "${CONFIG_FILE}" .config
+        else
+          echo "No preset config file found, using menu default"
+        fi
+
+        make defconfig
+
+        echo "Selected TARGETs:"
+        grep -E 'TARGET_mediatek|sl-3000' .config || true
+
+    - name: Download sources (dl)
+      run: |
+        cd openwrt
+        make download -j8
+        # 删除小文件，防止坏包
+        find dl -size -1024c -delete
+
+    - name: Compile firmware
+      id: compile
+      run: |
+        cd openwrt
+        echo "Start compile with $(nproc) threads"
+        if make -j"$(nproc)"; then
+          echo "ok=1" >> $GITHUB_OUTPUT
+        else
+          echo "First build failed, try single thread verbose"
+          make -j1 V=s
+          echo "ok=1" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Package firmware (zip)
+      if: steps.compile.outputs.ok == '1'
+      run: |
+        cd openwrt/bin/targets/*/*
+        # 去掉 packages 目录，节省体积
+        rm -rf packages || true
+
+        ZIP_NAME="OpenWrt_SL3000_${{ env.BUILD_DATE }}.zip"
+        zip -r "${ZIP_NAME}" ./*
+        echo "FW_DIR=$PWD"       >> $GITHUB_ENV
+        echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      if: steps.compile.outputs.ok == '1'
+      with:
+        name: OpenWrt-SL3000-${{ env.BUILD_DATE }}
+        path: ${{ env.FW_DIR }}
+
+    - name: Create GitHub Release and upload firmware
+      uses: softprops/action-gh-release@v1
+      if: steps.compile.outputs.ok == '1'
+      with:
+        tag_name: sl3000-${{ env.BUILD_DATE }}
+        name: SL3000 eMMC OpenWrt ${{ env.BUILD_DATE }}
+        body: |
+          自动编译的 SL-3000 eMMC OpenWrt 固件。
+          target: ${{ inputs.target }}
+          源码: ${{ env.REPO_URL }}
+        files: |
+          ${{ env.FW_DIR }}/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
