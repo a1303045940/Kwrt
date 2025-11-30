@@ -11,6 +11,14 @@ name: Build OpenWrt
 on: 
   repository_dispatch:
 
+  # 新增：支持手动触发
+  workflow_dispatch:
+    inputs:
+      target:
+        description: '编译目标，例如 mediatek_filogic / x86_64'
+        required: true
+        default: 'mediatek_filogic'
+        
 env:
   REPO_TOKEN: ${{ secrets.TOKEN_KIDDIN9 }}
   PPPOE_USERNAME: ${{ secrets.PPPOE_USERNAME }}
@@ -31,7 +39,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: ["${{ github.event.client_payload.target }}"]
+        #target: ["${{ github.event.client_payload.target }}"]
+        target:
+          - ${{ github.event_name == 'workflow_dispatch'
+                && github.event.inputs.target
+                || github.event.client_payload.target }}
         
     steps:
     - name: Checkout
