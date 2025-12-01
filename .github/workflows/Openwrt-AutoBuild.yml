@@ -323,12 +323,14 @@ jobs:
       
     - name: Show Device Model
       run: |
+        cd openwrt
         echo "1------------------------------------2"
         echo "Current Device: ${{ matrix.target }}"
         echo "1--------------------------------------2"
         
     - name: Show Detailed Target Info
       run: |
+        cd openwrt
         echo "2------------------------------------2"
         echo "Target System: $(grep CONFIG_TARGET_BOARD .config | cut -d= -f2 | tr -d '\"')"
         echo "Subtarget: $(grep CONFIG_TARGET_SUBTARGET .config | cut -d= -f2 | tr -d '\"')"
