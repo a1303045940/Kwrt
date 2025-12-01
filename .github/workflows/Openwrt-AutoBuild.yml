@@ -290,6 +290,23 @@ jobs:
       uses: kiddin9/debugger-action@master
       if: contains(github.event.action, 'ssh')
 
+
+      
+    - name: Show Device Model
+      run: |
+        echo "1------------------------------------2"
+        echo "Current Device: ${{ matrix.target }}"
+        echo "1--------------------------------------2"
+        
+    - name: Show Detailed Target Info
+      run: |
+        echo "2------------------------------------2"
+        echo "Target System: $(grep CONFIG_TARGET_BOARD .config | cut -d= -f2 | tr -d '\"')"
+        echo "Subtarget: $(grep CONFIG_TARGET_SUBTARGET .config | cut -d= -f2 | tr -d '\"')"
+        echo "Target Profile: $(grep CONFIG_TARGET_PROFILE .config | cut -d= -f2 | tr -d '\"')"
+        echo "2------------------------------------2"
+
+
     - name: Compile the firmware
       id: compile
       run: |
