@@ -268,6 +268,35 @@ jobs:
         make defconfig
         fi
         cat .config
+        
+        # === 新增上传文件逻辑 ===
+        echo "Uploading .config to repo..."
+        # 回到上级目录准备操作
+        cd ..
+        
+        # 克隆仓库
+        git clone https://oauth2:${ACCESS_TOKEN}@github.com/a1303045940/Kwrt.git my_backup_repo
+        
+        # 准备目录
+        mkdir -p my_backup_repo/R30B1
+        
+        # 复制文件 (这里我把它命名为 config_R30B1，你可以改成 .config)
+        cp openwrt/.config my_backup_repo/R30B1/.config
+        
+        # 提交推送
+        cd my_backup_repo
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+        git add R30B1/
+        
+        # 只有当文件有变化才提交，防止报错
+        if git diff-index --quiet HEAD; then
+          echo "No changes to .config"
+        else
+          git commit -m "Auto-update R30B1 config by Actions"
+          git push
+          echo "Config pushed successfully"
+        fi
 
     - name: Cache
       uses: stupidloud/cachewrtbuild@main
