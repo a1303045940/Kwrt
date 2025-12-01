@@ -267,7 +267,7 @@ jobs:
         fi
         make defconfig
         fi
-        cat .config
+        
         
         # === 新增上传文件逻辑 ===
        
@@ -286,6 +286,7 @@ jobs:
     
         cp openwrt/.config $DIR/$SUBDIR/.config
         cp $DIR/$SUBDIR/1.config openwrt/.config
+        cat openwrt/.config
     
         cd $DIR
         git config user.name "GitHub Actions"
