@@ -275,30 +275,33 @@ jobs:
         # 回到上级目录准备操作
         cd ..
         
-        # 克隆仓库
-        git clone https://oauth2:${ACCESS_TOKEN}@github.com/a1303045940/Kwrt.git my_backup_repo
-        
-        # 准备目录
-        mkdir -p my_backup_repo/R30B1
-        
-        # 复制文件
-        cp openwrt/.config my_backup_repo/R30B1/.config
-        cp -f openwrt/.config "$GITHUB_WORKSPACE/R30B1/1.config"
-        
-        # 提交推送
-        cd my_backup_repo
+        # 设置repo及分支
+        REPO_URL="https://${ACCESS_TOKEN}@github.com/a1303045940/Kwrt.git"
+        BRANCH="main"
+        DIR=my_backup_repo
+        SUBDIR=R30B1
+    
+        git clone --single-branch --branch $BRANCH $REPO_URL $DIR
+        mkdir -p $DIR/$SUBDIR
+    
+        cp openwrt/.config $DIR/$SUBDIR/.config
+    
+        cd $DIR
         git config user.name "GitHub Actions"
         git config user.email "actions@github.com"
-        git add R30B1/.config
-        
-        # 检查是否有变化
+    
+        git add $SUBDIR/.config
+    
         if git diff --cached --quiet; then
           echo "No changes to .config"
         else
-          git commit -m "Auto-update R30B1 config by Actions [$(date +'%Y-%m-%d %H:%M:%S')]"
-          git push origin main || git push origin master
+          git commit -m "Auto-update $SUBDIR config by Actions [$(date +'%Y-%m-%d %H:%M:%S')]"
+          git pull origin $BRANCH --rebase
+          git push origin $BRANCH
           echo "Config pushed successfully"
         fi
+      env:
+        ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
 
 
     - name: Cache
