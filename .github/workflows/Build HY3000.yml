@@ -401,52 +401,40 @@ jobs:
         [ ${{ env.COWURL }} ] && echo -e "[奶牛上传] (${{ env.COWURL }} 🐮)\n" >> release.txt
         [ ${{ env.NOTICE }} ] && echo -e "${{ env.NOTICE }}" >> release.txt || true
         
-    - name: Pack targets directory
+    - name: Pack and prepare ImageBuilder
       run: |
-        # 进入 bin 目录
-        cd openwrt
-        # 把 targets 目录打包成 targets.tar.gz
-        tar -czvf ../../targets.tar.gz bin/
-        echo "PACKED_TARGETS=$PWD/../../targets.tar.gz" >> $GITHUB_ENV
+        # 进入目录
+        cd openwrt/bin/targets/mediatek/filogic
+        
+        # 获取 ImageBuilder 文件名
+        IMAGEBUILDER=$(ls kwrt-imagebuilder-*.tar.zst 2>/dev/null || echo "")
+        
+        if [ -n "$IMAGEBUILDER" ]; then
+          echo "✅ 找到 ImageBuilder: $IMAGEBUILDER"
+          # 保存完整路径
+          echo "IMAGEBUILDER_FILE=$PWD/$IMAGEBUILDER" >> $GITHUB_ENV
+          # 保存文件名
+          echo "IMAGEBUILDER_NAME=$IMAGEBUILDER" >> $GITHUB_ENV
+          
+          # 显示文件信息
+          ls -lh "$IMAGEBUILDER"
+        else
+          echo "❌ 未找到 ImageBuilder 文件"
+          exit 1
+        fi
 
     - name: Upload firmware for release
-      uses: softprops/action-gh-release@master
+      uses: softprops/action-gh-release@v2
       continue-on-error: true
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.TOKEN_KIDDIN9 || secrets.GITHUB_TOKEN }}
       with:
-        # 上传刚才打好的包，以及原本的固件（如果你还想要的话）
         files: |
-          targets.tar.gz
+          ${{ env.IMAGEBUILDER_FILE }}
           ${{ env.FIRMWARE }}/*
         name: ${{ env.date2 }} ${{matrix.target}} ${{ github.event.repository.name }} ${{ env.EMOJI }}
         tag_name: ${{ env.date }}_${{matrix.target}}
         body_path: release.txt
-
-    - name: Upload firmware for release
-      uses: softprops/action-gh-release@master
-      continue-on-error: true
-      # if: env.REPO_TOKEN && env.UPLOAD_FIRMWARE_FOR_RELEASE == 'true'
-      env:
-        #GITHUB_TOKEN: ${{ secrets.TOKEN_KIDDIN9 }}
-        GITHUB_TOKEN: ${{ secrets.TOKEN_KIDDIN9 || secrets.GITHUB_TOKEN }}
-      with:
-        files: "${{ env.FIRMWARE }}/*"
-        name: ${{ env.date2 }} ${{matrix.target}} ${{ github.event.repository.name }} ${{ env.EMOJI }}
-        tag_name: ${{ env.date }}_${{matrix.target}}
-        body_path: release.txt
-    
-    - name: WeChat notification
-      continue-on-error: true
-      if: env.SCKEY
-      run: |
-        # [ steps.compile.outputs.status == 'success' ] && curl https://sctapi.ftqq.com/${{ secrets.SCKEY }}.send?text=🎉OpenWrt_${{ env.VERSION }}_${{matrix.target}}编译完成😋|| curl https://sctapi.ftqq.com/${{ secrets.SCKEY }}.send?text=❌OpenWrt_${{ env.VERSION }}_${{matrix.target}}编译失败😂
-
-    - name: Telegram notification
-      if: env.TELEGRAM_TOKEN && ! contains(github.event.action, 'notg')
-      continue-on-error: true
-      run: |
-        curl -k --data chat_id="${{ env.TELEGRAM_CHAT_ID }}" --data "text=🎉 OpenWrt ${{ env.VERSION }} ${{matrix.target}} 编译成功 😋  https://dl.openwrt.ai/firmware/${{matrix.target}}/  ${{ env.COWURL }}   ${{ env.WETRANS }} 🚀" "https://api.telegram.org/bot${{ env.TELEGRAM_TOKEN }}/sendMessage"
 
     - name: Delete workflow runs
       uses: GitRML/delete-workflow-runs@main
