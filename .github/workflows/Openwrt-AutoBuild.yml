@@ -405,7 +405,7 @@ jobs:
       uses: softprops/action-gh-release@master
       continue-on-error: true
       env:
-        GITHUB_TOKEN: ${{ secrets.TOKEN_KIDDIN9 }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         # 上传刚才打好的包，以及原本的固件（如果你还想要的话）
         files: |
