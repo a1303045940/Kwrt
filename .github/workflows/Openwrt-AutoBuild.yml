@@ -344,6 +344,28 @@ jobs:
         [ ${{ env.WETRANS }} ] && echo -e "[WeTransfer] (${{ env.WETRANS }} 🗽)\n" >> release.txt
         [ ${{ env.COWURL }} ] && echo -e "[奶牛上传] (${{ env.COWURL }} 🐮)\n" >> release.txt
         [ ${{ env.NOTICE }} ] && echo -e "${{ env.NOTICE }}" >> release.txt || true
+        
+    - name: Pack targets directory
+      run: |
+        # 进入 bin 目录
+        cd openwrt/bin
+        # 把 targets 目录打包成 targets.tar.gz
+        tar -czvf ../../targets.tar.gz targets/
+        echo "PACKED_TARGETS=$PWD/../../targets.tar.gz" >> $GITHUB_ENV
+
+    - name: Upload firmware for release
+      uses: softprops/action-gh-release@master
+      continue-on-error: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.TOKEN_KIDDIN9 }}
+      with:
+        # 上传刚才打好的包，以及原本的固件（如果你还想要的话）
+        files: |
+          targets.tar.gz
+          ${{ env.FIRMWARE }}/*
+        name: ${{ env.date2 }} ${{matrix.target}} ${{ env.EMOJI }}
+        tag_name: ${{ env.date }}_${{matrix.target}}
+        body_path: release.txt
 
     - name: Upload firmware for release
       uses: softprops/action-gh-release@master
