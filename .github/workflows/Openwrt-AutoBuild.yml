@@ -404,9 +404,9 @@ jobs:
     - name: Pack targets directory
       run: |
         # 进入 bin 目录
-        cd openwrt/bin
+        cd openwrt
         # 把 targets 目录打包成 targets.tar.gz
-        tar -czvf ../../targets.tar.gz targets/
+        tar -czvf ../../targets.tar.gz bin/
         echo "PACKED_TARGETS=$PWD/../../targets.tar.gz" >> $GITHUB_ENV
 
     - name: Upload firmware for release
