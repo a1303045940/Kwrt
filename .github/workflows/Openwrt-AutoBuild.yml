@@ -283,6 +283,7 @@ jobs:
         
         # 复制文件
         cp openwrt/.config my_backup_repo/R30B1/.config
+        cp -f openwrt/.config "$GITHUB_WORKSPACE/R30B1/1.config"
         
         # 提交推送
         cd my_backup_repo
