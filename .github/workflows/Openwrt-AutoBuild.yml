@@ -285,8 +285,8 @@ jobs:
         mkdir -p $DIR/$SUBDIR
     
         cp openwrt/.config $DIR/$SUBDIR/.config
-        cp $DIR/$SUBDIR/1.config openwrt/.config
-        cat openwrt/.config
+        #cp $DIR/$SUBDIR/1.config openwrt/.config
+        #cat openwrt/.config
     
         cd $DIR
         git config user.name "GitHub Actions"
