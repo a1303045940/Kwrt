@@ -433,6 +433,9 @@ jobs:
         name: ${{ env.date2 }} ${{matrix.target}} ${{ github.event.repository.name }} ${{ env.EMOJI }}
         tag_name: ${{ env.date }}_${{matrix.target}}
         body_path: release.txt
+        make_latest: true          # 可选，确保这个 release 标记为最新
+        draft: false
+        prerelease: false
     
     - name: WeChat notification
       continue-on-error: true
