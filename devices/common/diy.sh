@@ -24,21 +24,6 @@ sed -i -e '/^\/etc\/profile/d' \
         -e '/^\/etc\/shinit/d' \
         package/base-files/Makefile
 sed -i "s/192.168.1.1/192.168.6.1/" package/base-files/files/bin/config_generate
-uci set system.@system[0].version="by 微信:Mr___zjz/OpenWrt 24.10.2"
-uci set system.@system[0].hostname="Openwrt"
-uci set wireless.@wifi-iface[0].ssid="OpenWrt-2.4G"
-uci set wireless.@wifi-iface[1].ssid="OpenWrt-5G"
-uci set wireless.@wifi-iface[0].encryption='psk2'
-uci set wireless.@wifi-iface[0].key='password'
-uci set wireless.@wifi-iface[1].encryption='psk2'
-uci set wireless.@wifi-iface[1].key='password'
-
-root_password="password"
-if [ -n "$root_password" ]; then
-  (echo "$root_password"; sleep 1; echo "$root_password") | passwd > /dev/null
-fi
-echo "All done!"
-uci commit
 sed -i 's/root:::0:99999:7:::/root:$1$V4UetPzk$CYXluq4wUazHjmCDBCqXF.::0:99999:7:::/g' package/base-files/files/etc/shadow
 
 wget -N https://github.com/immortalwrt/immortalwrt/raw/refs/heads/openwrt-24.10/package/kernel/linux/modules/video.mk -P package/kernel/linux/modules/
