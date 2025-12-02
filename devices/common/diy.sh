@@ -40,7 +40,7 @@ wget -N https://github.com/openwrt/luci/raw/refs/heads/master/libs/rpcd-mod-luci
 
 echo "$(date +"%s")" >version.date
 sed -i '/$(curdir)\/compile:/c\$(curdir)/compile: package/opkg/host/compile' package/Makefile
-sed -i "s/DEFAULT_PACKAGES:=/DEFAULT_PACKAGES:=luci-app-advancedplus luci-app-firewall luci-app-package-manager luci-app-upnp luci-app-npc luci-app-syscontrol luci-proto-wireguard \
+sed -i "s/DEFAULT_PACKAGES:=/DEFAULT_PACKAGES:=luci-app-advancedplus luci-app-firewall luci-app-package-manager luci-app-argon-config luci-i18n-argon-config-zh-cn luci-app-upnp luci-app-npc luci-app-syscontrol luci-proto-wireguard \
 luci-app-wizard luci-base luci-compat luci-lib-ipkg luci-lib-fs luci-app-log-viewer \
 coremark wget-ssl curl autocore htop nano zram-swap kmod-lib-zstd kmod-tcp-bbr bash openssh-sftp-server block-mount resolveip ds-lite swconfig luci-app-filemanager /" include/target.mk
 
