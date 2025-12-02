@@ -403,24 +403,22 @@ jobs:
         
     - name: Pack targets directory
       run: |
-        # 进入 bin 目录
-        cd openwrt/bin
-        # 把 targets 目录打包成 targets.tar.gz
-        tar -czvf ../../targets.tar.gz targets/
-        echo "PACKED_TARGETS=$PWD/../../targets.tar.gz" >> $GITHUB_ENV
-
+        cd openwrt/bin/
+        tar -czf ${{ github.workspace }}/targets.tar.gz targets/
+        echo "PACKED_TARGETS=${{ github.workspace }}/targets.tar.gz" >> $GITHUB_ENV
+        echo "✅ 打包完成: $(du -h ${{ github.workspace }}/targets.tar.gz | cut -f1)"
+    
     - name: Upload firmware for release
-      uses: softprops/action-gh-release@master
+      uses: softprops/action-gh-release@v2
       continue-on-error: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        # 上传刚才打好的包，以及原本的固件（如果你还想要的话）
         files: |
-          targets.tar.gz
+          ${{ env.PACKED_TARGETS }}
           ${{ env.FIRMWARE }}/*
-        name: ${{ env.date2 }} ${{matrix.target}} ${{ github.event.repository.name }} ${{ env.EMOJI }}
-        tag_name: ${{ env.date }}_${{matrix.target}}
+        name: ${{ env.date2 }} ${{ matrix.target }} ${{ github.event.repository.name }} ${{ env.EMOJI }}
+        tag_name: ${{ env.date }}_${{ matrix.target }}
         body_path: release.txt
 
     - name: Upload firmware for release
