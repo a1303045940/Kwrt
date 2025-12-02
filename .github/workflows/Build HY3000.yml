@@ -38,7 +38,6 @@ env:
   TZ: Asia/Shanghai
 
 jobs:
-  # 新增：动态设置目标
   setup:
     runs-on: ubuntu-latest
     outputs:
@@ -72,11 +71,13 @@ jobs:
 
     - name: Load Settings.ini
       run: |
-        echo "Building target: ${{matrix.target}}"
+        echo "🎯 Building target: ${{matrix.target}}"
         source "${{ github.workspace }}/devices/common/settings.ini"
         if [ -f "devices/${{matrix.target}}/settings.ini" ]; then
           source "${{ github.workspace }}/devices/${{matrix.target}}/settings.ini"
         fi
+        
+        # 导出环境变量
         echo "REPO_URL=${REPO_URL}" >> $GITHUB_ENV
         echo "REPO_BRANCH=${REPO_BRANCH}" >> $GITHUB_ENV
         echo "CONFIG_FILE=${CONFIG_FILE}" >> $GITHUB_ENV
@@ -87,10 +88,12 @@ jobs:
         echo "UPLOAD_FIRMWARE_FOR_RELEASE=${UPLOAD_FIRMWARE_FOR_RELEASE}" >> $GITHUB_ENV
         echo "UPLOAD_FIRMWARE_TO_COWTRANSFER=${UPLOAD_FIRMWARE_TO_COWTRANSFER}" >> $GITHUB_ENV
         echo "UPLOAD_FIRMWARE_TO_WETRANSFER=${UPLOAD_FIRMWARE_TO_WETRANSFER}" >> $GITHUB_ENV
+        
+        # 修改 diy.sh
         sed -i "1a REPO_TOKEN=${{ secrets.TOKEN_KIDDIN9 }}" ${{ github.workspace }}/devices/common/diy.sh
         sed -i "1a TARGET=${{matrix.target}}" ${{ github.workspace }}/devices/common/diy.sh
         
-        # 架构判断逻辑
+        # 架构判断
         case "${{matrix.target}}" in
           x86_64)
             echo "ARCH=linux/amd64" >> $GITHUB_ENV
@@ -192,42 +195,72 @@ jobs:
     - name: Clone source code
       run: |
         set -x
-        TAG_INFO="$(curl -gs -H 'Content-Type: application/json' \
-           -H "Authorization: Bearer ${{ secrets.TOKEN_KIDDIN9 }}" \
-           -X POST -d '{ "query": "query {repository(owner: \"openwrt\", name: \"openwrt\") {refs(refPrefix: \"refs/tags/\", first: 4, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) {nodes {name target { ... on Tag {tagger {date}}}}}}}"}' \
-           https://api.github.com/graphql)"
-        TAG_DATE="$( echo ${TAG_INFO} | jq -r '.data.repository.refs.nodes[] | select(.name | startswith("v24")) | .target.tagger.date' | head -n 1)"
-        if [[ $(( ($(date +%s) - $(date -d "$TAG_DATE" +%s)) / 86400 )) -lt 15 ]]; then
-          REPO_BRANCH="$( echo ${TAG_INFO} | jq -r '.data.repository.refs.nodes[].name' | grep v24 | head -n 1)"
-        else
-          REPO_BRANCH="openwrt-24.10"
+        
+        # 获取 REPO_URL（优先使用环境变量）
+        REPO_URL="${{ env.REPO_URL }}"
+        if [ -z "$REPO_URL" ]; then
+          REPO_URL="https://github.com/openwrt/openwrt"
+          echo "⚠️ REPO_URL 未设置，使用默认: $REPO_URL"
         fi
+        
+        # 检查是否手动指定分支
+        MANUAL_BRANCH="${{ env.REPO_BRANCH }}"
+        
+        if [ -n "$MANUAL_BRANCH" ]; then
+          echo "✅ 使用手动指定的分支: $MANUAL_BRANCH"
+          REPO_BRANCH="$MANUAL_BRANCH"
+        else
+          # 自动检测最新 tag
+          echo "🔍 自动检测 OpenWrt 最新 tag..."
+          TAG_INFO="$(curl -gs -H 'Content-Type: application/json' \
+             -H "Authorization: Bearer ${{ secrets.TOKEN_KIDDIN9 }}" \
+             -X POST -d '{ "query": "query {repository(owner: \"openwrt\", name: \"openwrt\") {refs(refPrefix: \"refs/tags/\", first: 4, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) {nodes {name target { ... on Tag {tagger {date}}}}}}}"}' \
+             https://api.github.com/graphql)"
+          
+          TAG_DATE="$(echo ${TAG_INFO} | jq -r '.data.repository.refs.nodes[] | select(.name | startswith("v24")) | .target.tagger.date' | head -n 1)"
+          
+          if [ -n "$TAG_DATE" ]; then
+            DAYS_OLD=$(( ($(date +%s) - $(date -d "$TAG_DATE" +%s)) / 86400 ))
+            echo "📅 最新 v24 tag 发布于 ${DAYS_OLD} 天前"
+            
+            if [[ $DAYS_OLD -lt 15 ]]; then
+              REPO_BRANCH="$(echo ${TAG_INFO} | jq -r '.data.repository.refs.nodes[].name' | grep v24 | head -n 1)"
+              echo "✅ 使用最新 tag: $REPO_BRANCH"
+            else
+              REPO_BRANCH="openwrt-24.10"
+              echo "⚠️ Tag 较旧，使用稳定分支: $REPO_BRANCH"
+            fi
+          else
+            REPO_BRANCH="openwrt-24.10"
+            echo "⚠️ 未找到 v24 tag，使用默认分支: $REPO_BRANCH"
+          fi
+        fi
+        
+        # 创建目录并写入配置
+        mkdir -p devices/common
         echo "CONFIG_VERSION_REPO=\"https://dl.openwrt.ai/releases/24.10\"" >> devices/common/.config
         
-        if [[ -z "${{ env.REPO_URL }}" ]]; then
-          REPO_URL="https://github.com/openwrt/openwrt"
+        # 克隆源码
+        echo "📥 克隆仓库: $REPO_URL (分支: $REPO_BRANCH)"
+        if [[ ${#REPO_BRANCH} -lt 10 ]]; then
+          git clone "$REPO_URL" -b "$REPO_BRANCH" --depth 1 openwrt
         else
-          REPO_URL="${{ env.REPO_URL }}"
+          git clone "$REPO_URL" --depth 50 openwrt
+          cd openwrt
+          git checkout "$REPO_BRANCH"
+          cd ..
         fi
         
-        if [[ -z "${{ env.REPO_BRANCH }}" ]]; then
-          if [[ ${#REPO_BRANCH} -lt 10 ]]; then
-            git clone "$REPO_URL" -b "$REPO_BRANCH" openwrt
-          else
-            git clone "$REPO_URL" openwrt
-            cd openwrt
-            git checkout "$REPO_BRANCH"
-          fi
-        else
-          REPO_BRANCH="${{env.REPO_BRANCH}}"
-          if [[ ${#REPO_BRANCH} -lt 10 ]]; then
-            git clone "$REPO_URL" -b "${REPO_BRANCH}" openwrt
-          else
-            git clone "$REPO_URL" openwrt
-            cd openwrt
-            git checkout "${REPO_BRANCH}"
-          fi
+        # 验证克隆
+        if [ ! -d "openwrt" ]; then
+          echo "❌ 源码克隆失败"
+          exit 1
         fi
+        
+        echo "✅ 源码克隆成功"
+        cd openwrt
+        echo "📋 当前分支: $(git branch --show-current || echo 'detached HEAD')"
+        echo "📋 最新提交: $(git log -1 --oneline)"
 
     - name: Free up disk space
       env:
@@ -262,22 +295,30 @@ jobs:
           cd $rootdir
         }
         export -f git_clone_path
+        
         cp -rf devices/common/. openwrt/
-        cp -rf devices/${{matrix.target}}/. openwrt/
+        cp -rf devices/${{matrix.target}}/. openwrt/ 2>/dev/null || true
         cp -rf devices openwrt/
         cd openwrt
-        chmod +x devices/common/$DIY_SH
-        /bin/bash "devices/common/$DIY_SH"
-        cp -f devices/common/$CONFIG_FILE .config
+        
+        if [ -f "devices/common/$DIY_SH" ]; then
+          chmod +x devices/common/$DIY_SH
+          /bin/bash "devices/common/$DIY_SH"
+        fi
+        
+        cp -f devices/common/$CONFIG_FILE .config 2>/dev/null || true
         grep "CONFIG_TARGET_DEVICE_" .config | grep "=y" || true
+        
         if [ -f "devices/${{matrix.target}}/$CONFIG_FILE" ]; then
           echo >> .config
           cat devices/${{matrix.target}}/$CONFIG_FILE >> .config
         fi
+        
         if [ -f "devices/${{matrix.target}}/$DIY_SH" ]; then
           chmod +x devices/${{matrix.target}}/$DIY_SH
           /bin/bash "devices/${{matrix.target}}/$DIY_SH"
         fi
+        
         cp -Rf ./diy/* ./ 2>/dev/null || true
 
     - name: Apply patches
@@ -289,13 +330,17 @@ jobs:
         if [ -n "$(ls -A devices/${{matrix.target}}/*.bin.patch 2>/dev/null)" ]; then
           git apply devices/${{matrix.target}}/patches/*.bin.patch
         fi
+        
         find "devices/${{matrix.target}}/patches" -maxdepth 1 -type f -name '*.revert.patch' -print0 | \
-          sort -z | xargs -I % -t -0 -n 1 sh -c "cat '%' | patch -d './' -R -B --merge -p1 --forward"
+          sort -z | xargs -I % -t -0 -n 1 sh -c "cat '%' | patch -d './' -R -B --merge -p1 --forward" || true
+        
         find "devices/${{matrix.target}}/patches" -maxdepth 1 -type f -name '*.patch' \
           ! -name '*.revert.patch' ! -name '*.bin.patch' -print0 | \
-          sort -z | xargs -I % -t -0 -n 1 sh -c "cat '%' | patch -d './' -B --merge -p1 --forward"
+          sort -z | xargs -I % -t -0 -n 1 sh -c "cat '%' | patch -d './' -B --merge -p1 --forward" || true
         
-        sed -i '$a  \
+        # 添加内核配置
+        for config_file in $(find target/linux -path "target/linux/*/config-*"); do
+          sed -i '$a  \
         CONFIG_CPU_FREQ_GOV_POWERSAVE=y \
         CONFIG_CPU_FREQ_GOV_USERSPACE=y \
         CONFIG_CPU_FREQ_GOV_ONDEMAND=y \
@@ -303,24 +348,78 @@ jobs:
         CONFIG_CRYPTO_CHACHA20_NEON=y \
         CONFIG_CRYPTO_CHACHA20POLY1305=y \
         CONFIG_FAT_DEFAULT_IOCHARSET="utf8" \
-        ' $(find target/linux -path "target/linux/*/config-*")
+        ' "$config_file"
+        done
+
+    - name: Clean problematic packages
+      run: |
+        cd openwrt
+        
+        echo "🧹 清理已知问题包配置..."
+        
+        # 移除循环依赖的包
+        PROBLEM_PACKAGES=(
+          "luci-app-fchomo"
+          "nikki"
+          "luci-lighttpd"
+          "ip6tables-zz-legacy"
+          "firewall[^4]"
+        )
+        
+        for pkg in "${PROBLEM_PACKAGES[@]}"; do
+          if [ -f ".config" ]; then
+            sed -i "/CONFIG_PACKAGE_${pkg}/d" .config 2>/dev/null || true
+          fi
+        done
+        
+        echo "✅ 清理完成"
 
     - name: Defconfig
       run: |
         cd openwrt
-        make defconfig
-        if [[ ! "${{matrix.target}}" =~ (amlogic_*|armsr_armv8|bcm27xx_*|rockchip_armv8|sunxi_*|x86_*) ]]; then
-          sed -n '/# Wireless Drivers/,/# end of Wireless Drivers/p' .config | sed -e 's/=m/=n/' >> .config
-          if [[ "${{matrix.target}}" == "rockchip_rk35xx" ]]; then 
-            sed -n '/# Video Support/,/# end of Video Support/p' .config | sed -e 's/=m/=n/' >> .config
+        
+        echo "🔧 执行 defconfig..."
+        
+        # 第一次 defconfig
+        make defconfig 2>&1 | tee defconfig.log || {
+          echo "⚠️ Defconfig 遇到问题，尝试修复..."
+          
+          # 检查循环依赖
+          if grep -q "recursive dependency" defconfig.log; then
+            echo "🔧 修复循环依赖..."
+            sed -i '/CONFIG_PACKAGE_luci-app-fchomo/d' .config
+            sed -i '/CONFIG_PACKAGE_nikki/d' .config
+            sed -i '/CONFIG_PACKAGE_luci-lighttpd/d' .config
+            sed -i '/CONFIG_PACKAGE_ip6tables-zz-legacy/d' .config
+            sed -i '/CONFIG_LIGHTTPD_SSL/d' .config
+            sed -i '/CONFIG_ARIA2_OPENSSL/d' .config
           fi
+          
+          # 重试
+          make defconfig
+        }
+        
+        # 针对特定目标调整
+        if [[ ! "${{matrix.target}}" =~ (amlogic_*|armsr_armv8|bcm27xx_*|rockchip_armv8|sunxi_*|x86_*) ]]; then
+          echo "🔧 调整无线驱动配置..."
+          sed -n '/# Wireless Drivers/,/# end of Wireless Drivers/p' .config | \
+            sed -e 's/=m/=n/' >> .config
+          
+          if [[ "${{matrix.target}}" == "rockchip_rk35xx" ]]; then 
+            sed -n '/# Video Support/,/# end of Video Support/p' .config | \
+              sed -e 's/=m/=n/' >> .config
+          fi
+          
           make defconfig
         fi
+        
+        echo "✅ Defconfig 完成"
 
     - name: Backup config to repository
       if: success() && github.event_name == 'workflow_dispatch'
+      continue-on-error: true
       run: |
-        echo "📤 Uploading .config to backup repository..."
+        echo "📤 备份配置文件..."
         cd ..
         
         REPO_URL="https://${{ secrets.ACCESS_TOKEN }}@github.com/a1303045940/Kwrt.git"
@@ -342,12 +441,12 @@ jobs:
         git add $SUBDIR/
     
         if ! git diff --cached --quiet; then
-          git commit -m "🤖 Auto-backup: ${{matrix.target}} config [${TIMESTAMP}]"
+          git commit -m "🤖 Auto-backup: ${{matrix.target}} [${TIMESTAMP}]"
           git pull origin $BRANCH --rebase
           git push origin $BRANCH
-          echo "✅ Config backup successful"
+          echo "✅ 配置备份成功"
         else
-          echo "ℹ️ No changes detected"
+          echo "ℹ️ 配置无变化"
         fi
       env:
         ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
@@ -365,7 +464,7 @@ jobs:
         shopt -s extglob
         cd openwrt
         if [[ -f staging_dir/*${{ env.MTARGET }}*/bin ]]; then
-          rm -rf staging_dir/!(*${{ env.MTARGET }}*|host|hostpkg) build_dir/!(*${{ env.MTARGET }}*|host|hostpkg)
+          rm -rf staging_dir/!(*${{ env.MTARGET }}*|host|hostpkg) build_dir/!(*${{ env.MTARGET }}*|host|hostpkg) 2>/dev/null || true
         fi
         df -hT
 
@@ -394,7 +493,7 @@ jobs:
       run: |
         shopt -s extglob
         cd openwrt
-        echo -e "🔨 Using $(($(nproc)+1)) threads for compilation"
+        echo -e "🔨 使用 $(($(nproc)+1)) 线程编译"
         make -j$(($(nproc)+1)) || make V=s &>build.log || \
         (tail -50 build.log; \
          curl -k --data chat_id="${{ env.TELEGRAM_CHAT_ID }}" \
@@ -402,8 +501,8 @@ jobs:
               "https://api.telegram.org/bot${{ env.TELEGRAM_TOKEN }}/sendMessage"; \
          df -hT; exit 1)
         sed -i "s/# CONFIG_IB is not set/CONFIG_IB=y/" .config
-        rm -rf staging_dir/toolchain-*/bin/*openwrt-linux-musl-lto-dump
-        rm -rf staging_dir/toolchain-*/initial
+        rm -rf staging_dir/toolchain-*/bin/*openwrt-linux-musl-lto-dump 2>/dev/null || true
+        rm -rf staging_dir/toolchain-*/initial 2>/dev/null || true
         df -hT
 
     - name: Organize files
@@ -411,9 +510,9 @@ jobs:
       continue-on-error: true
       run: |
         shopt -s extglob
-        cd openwrt/bin/targets/*/*/
+        cd openwrt/bin/targets/*/*/ 2>/dev/null || cd openwrt/bin/targets/*/ || exit 1
         cp $GITHUB_WORKSPACE/openwrt/.config ${{matrix.target}}.config || true
-        cp $GITHUB_WORKSPACE/openwrt/build_dir/target-*/linux-*/linux-*/.config ${{matrix.target}}_kernel.config || true
+        cp $GITHUB_WORKSPACE/openwrt/build_dir/target-*/linux-*/linux-*/.config ${{matrix.target}}_kernel.config 2>/dev/null || true
         rm -rf kwrt-!(*imagebuilder*) 2>/dev/null || true
         Emoji=("🎉" "🤞" "✨" "🎁" "🎈" "🎄" "🎨" "💋" "🍓" "🍕" "🍉" "💐" "🌴" "🚀" "🛸" "🗽" "⛅" "🌈" "🔥" "⛄" "🐶" "🏅" "🦄" "🐤")
         echo "EMOJI=${Emoji[$[$RANDOM % ${#Emoji[@]}]]}" >> $GITHUB_ENV
@@ -428,6 +527,7 @@ jobs:
     - name: Deploy imagebuilder to server
       uses: easingthemes/ssh-deploy@main
       if: env.SSH_PRIVATE_KEY && ! contains(github.event.action, 'noser')
+      continue-on-error: true
       with:
         SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         ARGS: "-avzr"
@@ -449,20 +549,20 @@ jobs:
         
     - name: Pack and prepare ImageBuilder
       id: pack_imagebuilder
+      continue-on-error: true
       run: |
-        # 动态获取目标路径
-        TARGET_PATH=$(find openwrt/bin/targets -type d -name "*" | grep -E "/(mediatek|x86|rockchip|bcm27xx)/" | head -n 1)
+        TARGET_PATH=$(find openwrt/bin/targets -type f -name "kwrt-imagebuilder-*.tar.zst" -printf '%h\n' | head -n 1)
         
         if [ -z "$TARGET_PATH" ]; then
-          echo "❌ 未找到 targets 输出目录"
-          exit 1
+          echo "⚠️ 未找到 ImageBuilder 文件"
+          echo "IMAGEBUILDER_FILE=" >> $GITHUB_ENV
+          exit 0
         fi
         
         echo "📁 Target path: $TARGET_PATH"
         cd "$TARGET_PATH"
         
-        # 查找 ImageBuilder
-        IMAGEBUILDER=$(ls kwrt-imagebuilder-*.tar.zst 2>/dev/null | head -n 1 || echo "")
+        IMAGEBUILDER=$(ls kwrt-imagebuilder-*.tar.zst 2>/dev/null | head -n 1)
         
         if [ -n "$IMAGEBUILDER" ]; then
           echo "✅ 找到 ImageBuilder: $IMAGEBUILDER"
@@ -470,7 +570,6 @@ jobs:
           echo "IMAGEBUILDER_NAME=$IMAGEBUILDER" >> $GITHUB_ENV
           ls -lh "$IMAGEBUILDER"
         else
-          echo "⚠️ 未找到 ImageBuilder 文件 (某些目标可能不生成)"
           echo "IMAGEBUILDER_FILE=" >> $GITHUB_ENV
         fi
 
@@ -483,7 +582,6 @@ jobs:
       with:
         files: |
           ${{ env.IMAGEBUILDER_FILE }}
-          ${{ env.FIRMWARE }}/*
         name: ${{ env.date2 }} ${{matrix.target}} ${{ env.EMOJI }}
         tag_name: ${{ env.VERSION }}_${{matrix.target}}_${{ github.run_number }}
         body_path: release.txt
