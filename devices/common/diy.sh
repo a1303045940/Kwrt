@@ -93,8 +93,8 @@ sed -i -e "s/set \${s}.country='\${country || ''}'/set \${s}.country='\${country
 
 rm -rf package/feeds/packages/jool
 
-# 删掉首页底部 4 个 openwrt.ai 链接
-cat > feeds/luci/modules/luci-base/luasrc/view/admin_status/index/links.htm << 'EOF'
+if [ -d "feeds/luci/collections/luci-base/luasrc/view/admin_status/index" ]; then
+    cat > feeds/luci/collections/luci-base/luasrc/view/admin_status/index/links.htm << 'EOF'
 <script type="text/javascript">
 (function() {
     var links = document.getElementById('links');
@@ -104,3 +104,8 @@ cat > feeds/luci/modules/luci-base/luasrc/view/admin_status/index/links.htm << '
 })();
 </script>
 EOF
+    echo "✅ 已删除首页底部链接"
+else
+    echo "⚠️  LuCI 路径不存在，跳过删除链接"
+fi
+
