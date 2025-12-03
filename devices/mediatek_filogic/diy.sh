@@ -27,16 +27,3 @@ sed -i "s/-stock//g" package/boot/uboot-envtools/files/mediatek_filogic
 
 sed -i "s/openwrt-mediatek-filogic/kwrt-mediatek-filogic/g" target/linux/mediatek/image/filogic.mk
 sed -i "s/ fitblk / /g" target/linux/mediatek/image/filogic.mk
-
-# 禁用小容量设备
-# echo "🔧 禁用小容量设备..."
-# if [ -f ".config" ]; then
-#   sed -i 's/CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_cudy_re3000-v1=y/# CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_cudy_re3000-v1 is not set/' .config
-#   sed -i 's/CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_cudy_wr3000-v1=y/# CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_cudy_wr3000-v1 is not set/' .config
-#   sed -i 's/CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netgear_wax220=y/# CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_netgear_wax220 is not set/' .config
-#   echo "✅ 配置修改完成"
-# else
-#   echo "⚠️ .config 文件不存在，跳过设备禁用"
-# fi
-
-# echo "✅ 所有修改完成"
