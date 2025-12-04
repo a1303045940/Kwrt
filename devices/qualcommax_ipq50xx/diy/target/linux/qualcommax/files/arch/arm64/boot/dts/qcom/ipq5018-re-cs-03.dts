@@ -436,7 +436,7 @@
 	};
 };
 
-&wifi0 {
+&wifi {
 	qcom,multipd_arch;
 	qcom,userpd-subsys-name = "q6v5_wcss_userpd1";
 	qcom,rproc = <&q6_wcss_pd1>;
