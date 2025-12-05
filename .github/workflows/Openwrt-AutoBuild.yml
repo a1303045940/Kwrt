@@ -268,10 +268,10 @@ jobs:
         make defconfig
         fi
         
-        sed -i '/CONFIG_TARGET_LINUX_VERSION/d' .config
-        sed -i '/CONFIG_KERNEL_GIT_CLONE_URI/d' .config
-        echo 'CONFIG_TARGET_LINUX_VERSION="6.6.116"' >> .config
-        echo 'CONFIG_KERNEL_GIT_CLONE_URI=""' >> .config
+        # sed -i '/CONFIG_TARGET_LINUX_VERSION/d' .config
+        # sed -i '/CONFIG_KERNEL_GIT_CLONE_URI/d' .config
+        # echo 'CONFIG_TARGET_LINUX_VERSION="6.6.116"' >> .config
+        # echo 'CONFIG_KERNEL_GIT_CLONE_URI=""' >> .config
         
         # 验证
         echo "内核版本配置:"
