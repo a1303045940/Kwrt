@@ -25,10 +25,8 @@ sed -i -e '/^\/etc\/profile/d' \
         package/base-files/Makefile
 sed -i "s/192.168.1/192.168.6/" package/base-files/files/bin/config_generate
 
-# 这个哈希对应的密码是 "password"
-
-sed -i 's|^root:[^:]*:|root:$1$V4UetPzk$CYXluq4wUazHjmCDBCqXF.:|' /etc/shadow
-sed -i 's|^root:[^:]*:|root:$1$V4UetPzk$CYXluq4wUazHjmCDBCqXF.:|' package/base-files/files/etc/shadow
+echo -e "password\npassword" | passwd root
+sed -i 's|^root:[^:]*:|root:$5$a1grDqnDettfkcMO$27EoNRhxF4vASwsi4xjtQKrzS9bb0yytF6aUDDMtQV7:|' package/base-files/files/etc/shadow
 
 wget -N https://github.com/immortalwrt/immortalwrt/raw/refs/heads/openwrt-24.10/package/kernel/linux/modules/video.mk -P package/kernel/linux/modules/
 wget -N https://github.com/immortalwrt/immortalwrt/raw/refs/heads/openwrt-24.10/package/network/utils/nftables/patches/002-nftables-add-fullcone-expression-support.patch -P package/network/utils/nftables/patches/
